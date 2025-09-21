@@ -197,7 +197,7 @@ func main() {
 	if visitedFlags["vb"] || visitedFlags["verbose"] {
 		cliFlags["verbose"] = "true"
 	}
-	if visitedFlags["w"] || visitedFlags["whole"] {
+	if visitedFlags["md"] || visitedFlags["markdown"] {
 		cliFlags["markdown_output"] = "true"
 	}
 
@@ -212,6 +212,7 @@ func main() {
 	effectiveUrl := resolved.URL
 	effectiveQuiet := resolved.Quiet
 	effectiveVerbose := resolved.Verbose
+	effectiveMarkdown := resolved.Markdown
 
 	main_params := structs.Params{
 		ApiKey:       effectiveApiKey,
@@ -328,14 +329,14 @@ func main() {
 				}
 				helper.GetWholeText(
 					*preprompt+trimmedPrompt+contextText+pipedInput,
-					structs.ExtraOptions{IsGetWhole: *isWhole, IsMarkdown: *isMarkdown},
+					structs.ExtraOptions{IsGetWhole: *isWhole, IsMarkdown: effectiveMarkdown},
 					main_params,
 				)
 			} else {
 				formattedInput := bubbletea.GetFormattedInputStdin()
 				helper.GetWholeText(
 					*preprompt+formattedInput+cleanPipedInput,
-					structs.ExtraOptions{IsGetWhole: *isWhole, IsMarkdown: *isMarkdown},
+					structs.ExtraOptions{IsGetWhole: *isWhole, IsMarkdown: effectiveMarkdown},
 					main_params,
 				)
 			}
@@ -355,7 +356,7 @@ func main() {
 						IsGetCommand: true,
 						AutoExec:     *shouldExecuteCommand,
 						IsGetSilent:  effectiveQuiet,
-						IsMarkdown:   *isMarkdown,
+						IsMarkdown:   effectiveMarkdown,
 					},
 				)
 			} else {
@@ -379,7 +380,7 @@ func main() {
 					structs.ExtraOptions{
 						IsGetCode:   true,
 						IsGetSilent: effectiveQuiet,
-						IsMarkdown:  *isMarkdown,
+						IsMarkdown:  effectiveMarkdown,
 					},
 				)
 			} else {
@@ -428,7 +429,7 @@ func main() {
 				main_params.PrevMessages = append(main_params.PrevMessages, previousMessages...)
 				main_params.ThreadID = threadID
 
-				responseObjects, responseTxt := helper.GetData(input, main_params, structs.ExtraOptions{IsInteractive: true, IsNormal: true, IsGetSilent: effectiveQuiet, IsMarkdown: *isMarkdown})
+				responseObjects, responseTxt := helper.GetData(input, main_params, structs.ExtraOptions{IsInteractive: true, IsNormal: true, IsGetSilent: effectiveQuiet, IsMarkdown: effectiveMarkdown})
 
 				if len(*logFile) > 0 {
 					utils.LogToFile(responseTxt, "ASSISTANT_RESPONSE", *logFile)
@@ -492,7 +493,7 @@ func main() {
 					main_params.PrevMessages = append(main_params.PrevMessages, previousMessages...)
 					main_params.ThreadID = threadID
 
-					responseObjects, responseTxt := helper.GetData(userInput, main_params, structs.ExtraOptions{IsInteractive: true, IsNormal: true, IsGetSilent: effectiveQuiet, IsMarkdown: *isMarkdown})
+					responseObjects, responseTxt := helper.GetData(userInput, main_params, structs.ExtraOptions{IsInteractive: true, IsNormal: true, IsGetSilent: effectiveQuiet, IsMarkdown: effectiveMarkdown})
 					previousMessages = append(previousMessages, responseObjects...)
 					lastResponse = responseTxt
 
@@ -551,7 +552,7 @@ func main() {
 				main_params.ThreadID = threadID
 				main_params.SystemPrompt = promptIs
 
-				responseObjects, responseTxt := helper.GetData(input, main_params, structs.ExtraOptions{IsInteractiveShell: true, IsNormal: true, IsMarkdown: *isMarkdown})
+				responseObjects, responseTxt := helper.GetData(input, main_params, structs.ExtraOptions{IsInteractiveShell: true, IsNormal: true, IsMarkdown: effectiveMarkdown})
 				// Regex to match complete <cmd>...</cmd>
 				commandRegex := regexp.MustCompile(`<cmd>(.*?)</cmd>`)
 				matches := commandRegex.FindStringSubmatch(responseTxt)
@@ -649,7 +650,7 @@ func main() {
 				extraOptions := structs.ExtraOptions{
 					IsFind:     true,
 					Verbose:    effectiveVerbose,
-					IsMarkdown: *isMarkdown,
+					IsMarkdown: effectiveMarkdown,
 				}
 
 				helper.SearchQuery(trimmedPrompt, main_params, extraOptions, effectiveQuiet, *logFile)
@@ -670,7 +671,7 @@ func main() {
 				IsInteractiveFind: true,
 				IsFind:            true,
 				Verbose:           effectiveVerbose,
-				IsMarkdown:        *isMarkdown,
+				IsMarkdown:        effectiveMarkdown,
 			}
 
 			// Create a prompt-compatible input reader function for confirmations
@@ -762,7 +763,7 @@ func main() {
 				main_params.ThreadID = threadID
 				main_params.SystemPrompt = promptAlias
 
-				responseObjects, responseTxt := helper.GetData(input, main_params, structs.ExtraOptions{IsInteractiveShell: true, IsNormal: true, IsMarkdown: *isMarkdown})
+				responseObjects, responseTxt := helper.GetData(input, main_params, structs.ExtraOptions{IsInteractiveShell: true, IsNormal: true, IsMarkdown: effectiveMarkdown})
 				// Regex to match complete <cmd>...</cmd>
 				commandRegex := regexp.MustCompile(`<cmd>(.*?)</cmd>`)
 				matches := commandRegex.FindStringSubmatch(responseTxt)
@@ -855,11 +856,11 @@ func main() {
 
 					return
 				}
-				helper.MakeRequestAndGetData(*preprompt+trimmedPrompt+contextText+pipedInput, main_params, structs.ExtraOptions{IsGetSilent: true, IsMarkdown: *isMarkdown})
+				helper.MakeRequestAndGetData(*preprompt+trimmedPrompt+contextText+pipedInput, main_params, structs.ExtraOptions{IsGetSilent: true, IsMarkdown: effectiveMarkdown})
 			} else {
 				formattedInput := bubbletea.GetFormattedInputStdin()
 				fmt.Println()
-				helper.MakeRequestAndGetData(*preprompt+formattedInput+cleanPipedInput, main_params, structs.ExtraOptions{IsGetSilent: true, IsMarkdown: *isMarkdown})
+				helper.MakeRequestAndGetData(*preprompt+formattedInput+cleanPipedInput, main_params, structs.ExtraOptions{IsGetSilent: true, IsMarkdown: effectiveMarkdown})
 			}
 		default:
 			formattedInput := strings.TrimSpace(prompt)
@@ -874,7 +875,7 @@ func main() {
 				*preprompt+formattedInput+contextText+pipedInput,
 				main_params,
 				structs.ExtraOptions{
-					IsNormal: true, IsInteractive: false, IsMarkdown: *isMarkdown,
+					IsNormal: true, IsInteractive: false, IsMarkdown: effectiveMarkdown,
 				})
 		}
 
@@ -883,7 +884,7 @@ func main() {
 		scanner.Scan()
 		input := scanner.Text()
 		formattedInput := strings.TrimSpace(input)
-		helper.GetData(*preprompt+formattedInput+pipedInput, main_params, structs.ExtraOptions{IsInteractive: false, IsMarkdown: *isMarkdown})
+		helper.GetData(*preprompt+formattedInput+pipedInput, main_params, structs.ExtraOptions{IsInteractive: false, IsMarkdown: effectiveMarkdown})
 	}
 }
 

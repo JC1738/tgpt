@@ -261,6 +261,12 @@ func (c *Config) setDefaultsValue(field, value string) error {
 			return fmt.Errorf("invalid verbose value: %s", value)
 		}
 		c.Defaults.Verbose = verbose
+	case "markdown_output":
+		markdown, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid markdown_output value: %s", value)
+		}
+		c.Defaults.MarkdownOutput = markdown
 	default:
 		return fmt.Errorf("unsupported defaults field: %s", field)
 	}
@@ -279,6 +285,8 @@ func (c *Config) getDefaultsValue(field string) (string, error) {
 		return fmt.Sprintf("%t", c.Defaults.Quiet), nil
 	case "verbose":
 		return fmt.Sprintf("%t", c.Defaults.Verbose), nil
+	case "markdown_output":
+		return fmt.Sprintf("%t", c.Defaults.MarkdownOutput), nil
 	default:
 		return "", fmt.Errorf("unsupported defaults field: %s", field)
 	}
