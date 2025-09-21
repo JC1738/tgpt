@@ -1451,7 +1451,7 @@ func InteractiveFindSession(params structs.Params, extraOptions structs.ExtraOpt
 		params.SystemPrompt = promptFind
 
 		// Get AI response (this will print with Bot label)
-		responseObjects, responseTxt := GetData(input, params, structs.ExtraOptions{IsInteractiveFind: true, IsNormal: true})
+		responseObjects, responseTxt := GetData(input, params, structs.ExtraOptions{IsInteractiveFind: true, IsNormal: true, IsMarkdown: extraOptions.IsMarkdown})
 
 		// Check if response contains search intent
 		searchRegex := regexp.MustCompile(`<search>(.*?)</search>`)
@@ -1486,7 +1486,7 @@ func InteractiveFindSession(params structs.Params, extraOptions structs.ExtraOpt
 
 			// Update conversation with search context and get final response (this will print with Bot label)
 			params.PrevMessages = previousMessages
-			finalResponseObjects, finalResponseTxt := GetData(fmt.Sprintf("Based on these search results, answer the user's question: %s", input), params, structs.ExtraOptions{IsInteractiveFind: true, IsNormal: true})
+			finalResponseObjects, finalResponseTxt := GetData(fmt.Sprintf("Based on these search results, answer the user's question: %s", input), params, structs.ExtraOptions{IsInteractiveFind: true, IsNormal: true, IsMarkdown: extraOptions.IsMarkdown})
 
 			if len(logFile) > 0 {
 				utils.LogToFile(finalResponseTxt, "ASSISTANT_RESPONSE", logFile)
