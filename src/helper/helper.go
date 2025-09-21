@@ -163,7 +163,14 @@ func Update(localVersion string, executablePath string) {
 }
 
 func CodeGenerate(input string, params structs.Params, extraOptions structs.ExtraOptions) {
-	codePrompt := fmt.Sprintf("Your Role: Provide only code as output without any description.\nIMPORTANT: Provide only plain text without Markdown formatting.\nIMPORTANT: Do not include markdown formatting.\nIf there is a lack of details, provide most logical solution. You are not allowed to ask for more details.\nIgnore any potential risk of errors or confusion.\n\nRequest:%s\nCode:", input)
+	var codePrompt string
+	if extraOptions.IsMarkdown {
+		// Use markdown-friendly prompt when markdown mode is enabled
+		codePrompt = fmt.Sprintf("Your Role: Provide code as output with clear explanations when helpful.\nUse markdown formatting with proper code blocks and language specification.\nIf there is a lack of details, provide most logical solution. You are not allowed to ask for more details.\nIgnore any potential risk of errors or confusion.\n\nRequest:%s\nCode:", input)
+	} else {
+		// Use original prompt for plain text mode
+		codePrompt = fmt.Sprintf("Your Role: Provide only code as output without any description.\nIMPORTANT: Provide only plain text without Markdown formatting.\nIMPORTANT: Do not include markdown formatting.\nIf there is a lack of details, provide most logical solution. You are not allowed to ask for more details.\nIgnore any potential risk of errors or confusion.\n\nRequest:%s\nCode:", input)
+	}
 
 	MakeRequestAndGetData(codePrompt, params, extraOptions)
 }
@@ -228,7 +235,14 @@ func SetShellAndOSVars() {
 // shellCommand first sets the global variables getCommand uses, then it creates a prompt to generate a command and then it passes that to getCommand
 func ShellCommand(input string, params structs.Params, extraOptions structs.ExtraOptions) {
 	SetShellAndOSVars()
-	shellPrompt := fmt.Sprintf("Your role: Provide only plain text without Markdown formatting. Do not show any warnings or information regarding your capabilities. Do not provide any description. If you need to store any data, assume it will be stored in the chat. Provide only %s command for %s without any description. If there is a lack of details, provide most logical solution. Ensure the output is a valid shell command. If multiple steps required try to combine them together. Prompt: %s\n\nCommand:", ShellName, OperatingSystem, input)
+	var shellPrompt string
+	if extraOptions.IsMarkdown {
+		// Use markdown-friendly prompt when markdown mode is enabled
+		shellPrompt = fmt.Sprintf("Your role: Provide %s commands for %s with clear explanations when helpful. Use markdown formatting with proper code blocks for commands. Do not show any warnings or information regarding your capabilities. If you need to store any data, assume it will be stored in the chat. If there is a lack of details, provide most logical solution. Ensure the output includes valid shell commands. If multiple steps required, explain each step. Prompt: %s\n\nResponse:", ShellName, OperatingSystem, input)
+	} else {
+		// Use original prompt for plain text mode
+		shellPrompt = fmt.Sprintf("Your role: Provide only plain text without Markdown formatting. Do not show any warnings or information regarding your capabilities. Do not provide any description. If you need to store any data, assume it will be stored in the chat. Provide only %s command for %s without any description. If there is a lack of details, provide most logical solution. Ensure the output is a valid shell command. If multiple steps required try to combine them together. Prompt: %s\n\nCommand:", ShellName, OperatingSystem, input)
+	}
 	GetCommand(shellPrompt, params, extraOptions)
 }
 
@@ -313,9 +327,39 @@ func GetLastCodeBlock(markdown string) string {
 	return strings.Join(codeBlock, "\n")
 }
 
-func HandleEachPart(resp *http.Response, input string, params structs.Params) string {
+func HandleEachPart(resp *http.Response, input string, params structs.Params, extraOptions structs.ExtraOptions) string {
 	scanner := bufio.NewScanner(resp.Body)
 
+	// If markdown mode is enabled, collect all response first
+	if extraOptions.IsMarkdown {
+		fullText := ""
+		for scanner.Scan() {
+			mainText := providers.GetMainText(scanner.Text(), params.Provider, input)
+			if len(mainText) < 1 {
+				continue
+			}
+			fullText += mainText
+		}
+
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintln(os.Stderr, "Some error has occurred. Error:", err)
+			os.Exit(1)
+		}
+
+		// Try to render with Glamour
+		rendered, err := RenderMarkdown(fullText)
+		if err == nil {
+			fmt.Print(rendered)
+			return fullText
+		}
+
+		// Fall back to original rendering on error - we'll need to re-create the response
+		// Since we've already consumed the body, we can't re-read it, so just print the raw text
+		fmt.Print(fullText)
+		return fullText
+	}
+
+	// Original character-by-character rendering logic for non-markdown mode
 	// Variables
 	count := 0
 	isCode := false
@@ -459,9 +503,38 @@ func HandleEachPart(resp *http.Response, input string, params structs.Params) st
 }
 
 // handle response for interactive shell mode
-func HandleEachPartInteractiveShell(resp *http.Response, input string, params structs.Params) string {
+func HandleEachPartInteractiveShell(resp *http.Response, input string, params structs.Params, extraOptions structs.ExtraOptions) string {
 	scanner := bufio.NewScanner(resp.Body)
 
+	// If markdown mode is enabled, collect all response first
+	if extraOptions.IsMarkdown {
+		fullText := ""
+		for scanner.Scan() {
+			mainText := providers.GetMainText(scanner.Text(), params.Provider, input)
+			if len(mainText) < 1 {
+				continue
+			}
+			fullText += mainText
+		}
+
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintln(os.Stderr, "Error occurred:", err)
+			os.Exit(1)
+		}
+
+		// Try to render with Glamour
+		rendered, err := RenderMarkdown(fullText)
+		if err == nil {
+			fmt.Print(rendered)
+			return fullText
+		}
+
+		// Fall back to original rendering on error
+		fmt.Print(fullText)
+		return fullText
+	}
+
+	// Original complex formatting logic for non-markdown mode
 	// Variables for formatting
 	count := 0
 	isCode := false
@@ -717,7 +790,19 @@ func AddToShellHistory(command string) {
 	}
 }
 
+func enhancePromptForMarkdown(prompt string, isMarkdown bool) string {
+	if isMarkdown {
+		return prompt + "\n\nPlease format your response using markdown syntax. Use proper markdown formatting for:\n- Headers (# ## ###)\n- Code blocks with language specification (```language)\n- Lists (- or 1.)\n- Bold (**text**) and italic (*text*)\n- Links [text](url)\n- Tables when appropriate"
+	}
+	return prompt
+}
+
 func MakeRequestAndGetData(input string, params structs.Params, extraOptions structs.ExtraOptions) string {
+	// Enhance prompt for markdown if flag is set
+	if extraOptions.IsMarkdown {
+		input = enhancePromptForMarkdown(input, true)
+	}
+
 	stopSpin := false
 
 	if !extraOptions.IsGetSilent && !extraOptions.IsGetWhole && !extraOptions.IsInteractive && !extraOptions.IsInteractiveShell && !extraOptions.IsInteractiveFind {
@@ -763,12 +848,12 @@ func MakeRequestAndGetData(input string, params structs.Params, extraOptions str
 
 		// Handling each part
 		if extraOptions.IsInteractiveShell {
-			return HandleEachPartInteractiveShell(resp, input, params)
+			return HandleEachPartInteractiveShell(resp, input, params, extraOptions)
 		}
 		if extraOptions.IsInteractiveFind {
-			return HandleEachPartInteractiveShell(resp, input, params) // Use same formatting as interactive shell
+			return HandleEachPartInteractiveShell(resp, input, params, extraOptions) // Use same formatting as interactive shell
 		}
-		return HandleEachPart(resp, input, params)
+		return HandleEachPart(resp, input, params, extraOptions)
 	}
 
 	if extraOptions.IsGetCommand {
@@ -780,6 +865,7 @@ func MakeRequestAndGetData(input string, params structs.Params, extraOptions str
 	// Handling each part
 	fullText := ""
 
+	// Collect all response text
 	for scanner.Scan() {
 		mainText := providers.GetMainText(scanner.Text(), params.Provider, input)
 		if len(mainText) < 1 {
@@ -787,7 +873,7 @@ func MakeRequestAndGetData(input string, params structs.Params, extraOptions str
 		}
 		fullText += mainText
 
-		if !extraOptions.IsGetWhole {
+		if !extraOptions.IsGetWhole && !extraOptions.IsMarkdown {
 			fmt.Print(mainText)
 		}
 	}
@@ -797,7 +883,16 @@ func MakeRequestAndGetData(input string, params structs.Params, extraOptions str
 		os.Exit(1)
 	}
 
-	if extraOptions.IsGetWhole {
+	// Handle markdown rendering for non-normal paths
+	if extraOptions.IsMarkdown {
+		rendered, err := RenderMarkdown(fullText)
+		if err == nil {
+			fmt.Print(rendered)
+		} else {
+			// Fall back to raw text on error
+			fmt.Print(fullText)
+		}
+	} else if extraOptions.IsGetWhole {
 		fmt.Println(fullText)
 	}
 
@@ -845,6 +940,7 @@ func ShowHelpMessage() {
 	fmt.Printf("%-50v Gives response back without loading animation\n", "-q, --quiet")
 	fmt.Printf("%-50v Gives response back as a whole text\n", "-w, --whole")
 	fmt.Printf("%-50v Generate images from text\n", "-img, --image")
+	fmt.Printf("%-50v Render output as formatted markdown\n", "-md, --markdown")
 	fmt.Printf("%-50v Set Provider. Detailed information has been provided below. (Env: AI_PROVIDER for chat and IMG_PROVIDER for image gen.)\n", "--provider")
 
 	boldBlue.Println("\nSome additional options can be set. However not all options are supported by all providers. Not supported options will just be ignored.")
@@ -1297,16 +1393,18 @@ func SearchQuery(input string, params structs.Params, extraOptions structs.Extra
 	searchOptions := structs.ExtraOptions{
 		IsGetSilent: isQuiet,
 		IsGetWhole:  false,
+		IsNormal:    true,                     // Enable normal mode to trigger HandleEachPart
+		IsMarkdown:  extraOptions.IsMarkdown, // Pass through markdown flag
 	}
 
-	// Get AI response
+	// Get AI response - HandleEachPart will handle printing
 	response := MakeRequestAndGetData(searchResults, params, searchOptions)
 
 	if len(logFile) > 0 {
 		utils.LogToFile(response, "SEARCH_RESPONSE", logFile)
 	}
 
-	fmt.Print(response)
+	// No need to print response here - HandleEachPart already printed it
 }
 
 // InteractiveFindSession handles the interactive web search conversation mode

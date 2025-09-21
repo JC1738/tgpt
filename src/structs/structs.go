@@ -26,6 +26,7 @@ type ExtraOptions struct {
 	IsFind             bool // IsFind enable web search functionality
 	IsInteractiveFind  bool // IsInteractiveFind enable interactive web search mode
 	Verbose            bool // Verbose enable detailed search output
+	IsMarkdown         bool // IsMarkdown enable markdown formatted output
 }
 
 type CommonResponse struct {
